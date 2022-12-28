@@ -42,6 +42,13 @@ Usage of nitter-rss-proxy:
         HTTP timeout in seconds for fetching a feed from a Nitter instance (default 10)
   -user string
         User to fetch to stdout (instead of starting a server)
+  -imageproxy
+        Use imageproxy to serve images (default false)
+  -imageproxy-url string
+        URL of imageproxy instance (default "https://images.weserv.nl/?url=%s")
+  -imageproxy-url-encode
+        Encode URL of imageproxy instance (default true)
+
 ```
 
 The server passes `GET` request paths to the Nitter instance:
