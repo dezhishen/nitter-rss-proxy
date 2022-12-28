@@ -51,10 +51,17 @@ func main() {
 	flag.BoolVar(&opts.rewrite, "rewrite", true, "Rewrite tweet content to point at twitter.com")
 	timeout := flag.Int("timeout", 10, "HTTP timeout in seconds for fetching a feed from a Nitter instance")
 	user := flag.String("user", "", "User to fetch to stdout (instead of starting a server)")
+	imageproxy := flag.Bool("imageproxy", false, "Use imageproxy instead of Nitter for images")
+	imageproxyUrl := flag.String("imageproxy-url", "https://images.weserv.nl?url=%s", "URL of imageproxy instance")
+	imageproxyUrlEncode := flag.Bool("imageproxy-url-encode", true, "URL encode imageproxy URL")
+
 	flag.Parse()
 
 	opts.format = feedFormat(*format)
 	opts.timeout = time.Duration(*timeout) * time.Second
+	opts.imageProxy = *imageproxy
+	opts.imageProxyUrl = *imageproxyUrl
+	opts.imageProxyUrlEncode = *imageproxyUrlEncode
 
 	hnd, err := newHandler(*base, *instances, opts)
 	if err != nil {
@@ -87,11 +94,14 @@ type handler struct {
 }
 
 type handlerOptions struct {
-	cycle        bool // cycle through instances
-	timeout      time.Duration
-	format       feedFormat
-	rewrite      bool // rewrite tweet content to point at Twitter
-	debugAuthors bool // log per-author tweet counts
+	cycle               bool // cycle through instances
+	timeout             time.Duration
+	format              feedFormat
+	rewrite             bool   // rewrite tweet content to point at Twitter
+	debugAuthors        bool   // log per-author tweet counts
+	imageProxy          bool   // use imageproxy instead of Nitter for images
+	imageProxyUrl       string // URL of imageproxy instance
+	imageProxyUrlEncode bool   // URL encode imageproxy URL
 }
 
 func newHandler(base, instances string, opts handlerOptions) (*handler, error) {
@@ -106,7 +116,6 @@ func newHandler(base, instances string, opts handlerOptions) (*handler, error) {
 			return nil, fmt.Errorf("failed parsing %q: %v", base, err)
 		}
 	}
-
 	for _, in := range strings.Split(instances, ",") {
 		// Hack to permit trailing commas to make it easier to comment out instances in configs.
 		if in == "" {
@@ -224,7 +233,7 @@ func (hnd *handler) rewrite(w http.ResponseWriter, b []byte, user string) error 
 		// content (often including HTML) in the Description field.
 		content := oi.Description
 		if hnd.opts.rewrite {
-			if content, err = rewriteContent(oi.Description); err != nil {
+			if content, err = rewriteContent(oi.Description, hnd.opts); err != nil {
 				return err
 			}
 		}
@@ -243,7 +252,6 @@ func (hnd *handler) rewrite(w http.ResponseWriter, b []byte, user string) error 
 		} else {
 			item.Description = content
 		}
-
 		if oi.PublishedParsed != nil {
 			item.Created = *oi.PublishedParsed
 		}
@@ -326,18 +334,24 @@ var iconRegexp = regexp.MustCompile(`^` +
 	`([-_.a-zA-Z0-9]+)$`) // group 2: ID, size, extension
 
 // rewriteIconURL rewrites a Nitter profile image URL to the corresponding Twitter URL.
-func rewriteIconURL(u string) string {
+func rewriteIconURL(u string, opts handlerOptions) string {
 	ms := iconRegexp.FindStringSubmatch(u)
 	if ms == nil {
 		return u
 	}
-	return fmt.Sprintf("https://pbs.twimg.com/profile_images/%v/%v", ms[1], ms[2])
+	if !opts.imageProxy {
+		return fmt.Sprintf("https://pbs.twimg.com/profile_images/%v/%v", ms[1], ms[2])
+	}
+	if opts.imageProxyUrlEncode {
+		return fmt.Sprintf(opts.imageProxyUrl, url.PathEscape(ms[0]))
+	}
+	return fmt.Sprintf(opts.imageProxyUrl, ms[0])
 }
 
 // rewritePatterns is used by rewriteContent to rewrite URLs within tweets.
 var rewritePatterns = []struct {
 	re *regexp.Regexp
-	fn func(ms []string) string // matching groups from re are passed
+	fn func(ms []string, opts handlerOptions) string // matching groups from re are passed
 }{
 	{
 		// Nitter URL referring to a tweet, e.g.
@@ -350,7 +364,7 @@ var rewritePatterns = []struct {
 			`(\d+)` + // group 3: tweet ID
 			`(?:#m)?` + // nitter adds these hashes
 			end),
-		func(ms []string) string {
+		func(ms []string, opts handlerOptions) string {
 			u := fmt.Sprintf("twitter.com/%v/status/%v", ms[2], ms[3])
 			if ms[1] != "" {
 				u = "https://" + u
@@ -366,7 +380,15 @@ var rewritePatterns = []struct {
 			`([-_a-zA-Z0-9]+)` + // group 1: image ID
 			`\.(jpg|png)` + // group 2: extension
 			end),
-		func(ms []string) string { return fmt.Sprintf("https://pbs.twimg.com/media/%v?format=%v", ms[1], ms[2]) },
+		func(ms []string, opts handlerOptions) string {
+			if !opts.imageProxy {
+				return fmt.Sprintf("https://pbs.twimg.com/media/%v?format=%v", ms[1], ms[2])
+			}
+			if opts.imageProxyUrlEncode {
+				return fmt.Sprintf("https://images.weserv.nl/?url=%s", url.QueryEscape(ms[0]))
+			}
+			return fmt.Sprintf("https://images.weserv.nl/?url=%s", ms[0])
+		},
 	},
 	{
 		// Nitter URL referring to a video, e.g.
@@ -375,7 +397,7 @@ var rewritePatterns = []struct {
 			scheme + host + `/pic` + slash + `video.twimg.com` + slash + `tweet_video` + slash +
 			`([-_.a-zA-Z0-9]+)` + // group 1: video name and extension
 			end),
-		func(ms []string) string { return "https://video.twimg.com/tweet_video/" + ms[1] },
+		func(ms []string, opts handlerOptions) string { return "https://video.twimg.com/tweet_video/" + ms[1] },
 	},
 	{
 		// Nitter URL referring to a video thumbnail, e.g.
@@ -384,7 +406,9 @@ var rewritePatterns = []struct {
 			scheme + host + `/pic` + slash + `tweet_video_thumb` + slash +
 			`([-_.a-zA-Z0-9]+)` + // group 1: thumbnail name and extension
 			end),
-		func(ms []string) string { return "https://video.twimg.com/tweet_video_thumb/" + ms[1] },
+		func(ms []string, opts handlerOptions) string {
+			return "https://video.twimg.com/tweet_video_thumb/" + ms[1]
+		},
 	},
 	{
 		// Nitter URL referring to an external (?) video thumbnail, e.g.
@@ -395,7 +419,7 @@ var rewritePatterns = []struct {
 			slash + `pu` + slash + `img` + slash +
 			`([-_.a-zA-Z0-9]+)` + // group 2: thumbnail name and extension
 			end),
-		func(ms []string) string {
+		func(ms []string, opts handlerOptions) string {
 			return "https://pbs.twimg.com/ext_tw_video_thumb/" + ms[1] + "/pu/img/" + ms[2]
 		},
 	},
@@ -407,7 +431,7 @@ var rewritePatterns = []struct {
 			host + `/watch\?v=` +
 			`([-_a-zA-Z0-9]+)` + // group 2: video ID
 			end),
-		func(ms []string) string {
+		func(ms []string, opts handlerOptions) string {
 			u := "youtube.com/watch?v=" + ms[2]
 			if ms[1] != "" {
 				u = "https://" + u
@@ -423,7 +447,7 @@ var rewritePatterns = []struct {
 			`invidious\.snopyta\.org/` +
 			`([-_a-zA-Z0-9]{8,})` + // group 2: video ID
 			end),
-		func(ms []string) string {
+		func(ms []string, opts handlerOptions) string {
 			u := "youtube.com/watch?v=" + ms[2]
 			if ms[1] != "" {
 				u = "https://" + u
@@ -437,12 +461,12 @@ var rewritePatterns = []struct {
 // Some public Nitter instances seem to be misconfigured, e.g. rewriting URLs to
 // start with "http://localhost", so we just modify all URLs that look like they
 // can be served by Twitter.
-func rewriteContent(s string) (string, error) {
+func rewriteContent(s string, opts handlerOptions) (string, error) {
 	// It'd be better to parse the HTML instead of using regular expressions, but that's quite
 	// painful to do (see https://github.com/derat/twittuh) so I'm trying to avoid it for now.
 	for _, rw := range rewritePatterns {
 		s = rw.re.ReplaceAllStringFunc(s, func(o string) string {
-			return rw.fn(rw.re.FindStringSubmatch(o))
+			return rw.fn(rw.re.FindStringSubmatch(o), opts)
 		})
 	}
 
