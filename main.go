@@ -339,13 +339,14 @@ func rewriteIconURL(u string, opts handlerOptions) string {
 	if ms == nil {
 		return u
 	}
+	result := fmt.Sprintf("https://pbs.twimg.com/profile_images/%v/%v", ms[1], ms[2])
 	if !opts.imageProxy {
-		return fmt.Sprintf("https://pbs.twimg.com/profile_images/%v/%v", ms[1], ms[2])
+		return result
 	}
 	if opts.imageProxyUrlEncode {
-		return fmt.Sprintf(opts.imageProxyUrl, url.PathEscape(ms[0]))
+		return fmt.Sprintf(opts.imageProxyUrl, url.PathEscape(result))
 	}
-	return fmt.Sprintf(opts.imageProxyUrl, ms[0])
+	return fmt.Sprintf(opts.imageProxyUrl, result)
 }
 
 // rewritePatterns is used by rewriteContent to rewrite URLs within tweets.
@@ -381,13 +382,14 @@ var rewritePatterns = []struct {
 			`\.(jpg|png)` + // group 2: extension
 			end),
 		func(ms []string, opts handlerOptions) string {
+			result := fmt.Sprintf("https://pbs.twimg.com/media/%v?format=%v", ms[1], ms[2])
 			if !opts.imageProxy {
-				return fmt.Sprintf("https://pbs.twimg.com/media/%v?format=%v", ms[1], ms[2])
+				return result
 			}
 			if opts.imageProxyUrlEncode {
-				return fmt.Sprintf("https://images.weserv.nl/?url=%s", url.QueryEscape(ms[0]))
+				return fmt.Sprintf("https://images.weserv.nl/?url=%s", url.QueryEscape(result))
 			}
-			return fmt.Sprintf("https://images.weserv.nl/?url=%s", ms[0])
+			return fmt.Sprintf("https://images.weserv.nl/?url=%s", result)
 		},
 	},
 	{
