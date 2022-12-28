@@ -222,7 +222,7 @@ func (hnd *handler) rewrite(w http.ResponseWriter, b []byte, user string) error 
 
 	var img string
 	if of.Image != nil {
-		img = rewriteIconURL(of.Image.URL)
+		img = rewriteIconURL(of.Image.URL, hnd.opts)
 		feed.Image = &feeds.Image{Url: img}
 	}
 
