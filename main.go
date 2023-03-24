@@ -109,13 +109,13 @@ func newHandler(base, instances string, opts handlerOptions) (*handler, error) {
 		client: http.Client{Timeout: opts.timeout},
 		opts:   opts,
 	}
-
 	if base != "" {
 		var err error
 		if hnd.base, err = url.Parse(base); err != nil {
 			return nil, fmt.Errorf("failed parsing %q: %v", base, err)
 		}
 	}
+	fmt.Sprintln("start checkServerHttp")
 	for _, in := range strings.Split(instances, ",") {
 		// Hack to permit trailing commas to make it easier to comment out instances in configs.
 		if in == "" {
@@ -125,13 +125,31 @@ func newHandler(base, instances string, opts handlerOptions) (*handler, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed parsing %q: %v", in, err)
 		}
+		success := checkServerHttp(in)
+		if !success {
+			continue
+		}
 		hnd.instances = append(hnd.instances, u)
 	}
+	fmt.Sprintln("end checkServerHttp")
 	if len(hnd.instances) == 0 {
 		return nil, errors.New("no instances supplied")
 	}
-
+	fmt.Printf("Using %d instances: %v", len(hnd.instances), hnd.instances)
 	return hnd, nil
+}
+
+func checkServerHttp(url string) bool {
+	timeout := time.Duration(5 * time.Second)
+	client := http.Client{
+		Timeout: timeout,
+	}
+	resp, err := client.Get(url)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return true
 }
 
 // Matches comma-separated Twitter usernames with an optional /media, /search, or /with_replies suffix
