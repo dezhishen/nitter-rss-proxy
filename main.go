@@ -115,7 +115,7 @@ func newHandler(base, instances string, opts handlerOptions) (*handler, error) {
 			return nil, fmt.Errorf("failed parsing %q: %v", base, err)
 		}
 	}
-	fmt.Sprintln("start checkServerHttp")
+	log.Printf("start checkServerHttp")
 	for _, in := range strings.Split(instances, ",") {
 		// Hack to permit trailing commas to make it easier to comment out instances in configs.
 		if in == "" {
@@ -125,26 +125,26 @@ func newHandler(base, instances string, opts handlerOptions) (*handler, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed parsing %q: %v", in, err)
 		}
-		success := checkServerHttp(in)
+		success := checkServerHttp(u)
 		if !success {
 			continue
 		}
 		hnd.instances = append(hnd.instances, u)
 	}
-	fmt.Sprintln("end checkServerHttp")
+	log.Printf("end checkServerHttp")
 	if len(hnd.instances) == 0 {
 		return nil, errors.New("no instances supplied")
 	}
-	fmt.Printf("Using %d instances: %v", len(hnd.instances), hnd.instances)
+	log.Printf("Using %d instances: %v", len(hnd.instances), hnd.instances)
 	return hnd, nil
 }
 
-func checkServerHttp(url string) bool {
+func checkServerHttp(url *url.URL) bool {
 	timeout := time.Duration(5 * time.Second)
 	client := http.Client{
 		Timeout: timeout,
 	}
-	resp, err := client.Get(url)
+	resp, err := client.Get(url.String())
 	if err != nil {
 		return false
 	}
