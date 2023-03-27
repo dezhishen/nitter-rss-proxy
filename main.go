@@ -119,14 +119,9 @@ func newHandler(base, instancesStr string, opts handlerOptions) (*handler, error
 	instances := strings.Split(instancesStr, ",")
 	wg.Add(len(instances))
 	log.Printf("start checkServerHttp,len: %d", len(instances))
-	ch := make(chan struct{}, 10)
 	for _, in := range instances {
-		defer func() {
-			wg.Done()
-			<-ch
-		}()
+		defer wg.Done()
 		go func(_in string) {
-			ch <- struct{}{}
 			log.Printf("checkServerHttp: %s", _in)
 			if _in == "" {
 				return
