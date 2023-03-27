@@ -52,8 +52,8 @@ func main() {
 	timeout := flag.Int("timeout", 10, "HTTP timeout in seconds for fetching a feed from a Nitter instance")
 	user := flag.String("user", "", "User to fetch to stdout (instead of starting a server)")
 	imageproxy := flag.Bool("imageproxy", false, "Use imageproxy instead of Nitter for images")
-	imageproxyUrl := flag.String("imageproxy-url", "https://images.weserv.nl?url=%s", "URL of imageproxy instance")
-	imageproxyUrlEncode := flag.Bool("imageproxy-url-encode", true, "URL encode imageproxy URL")
+	imageproxyUrl := flag.String("imageproxyurl", "https://weserv.nl?url=%s", "URL of imageproxy instance")
+	imageproxyUrlEncode := flag.Bool("imageproxyurlencode", false, "URL encode imageproxy URL")
 
 	flag.Parse()
 
@@ -117,6 +117,7 @@ func newHandler(base, instances string, opts handlerOptions) (*handler, error) {
 	}
 	log.Printf("start checkServerHttp")
 	for _, in := range strings.Split(instances, ",") {
+		log.Println(in)
 		// Hack to permit trailing commas to make it easier to comment out instances in configs.
 		if in == "" {
 			continue

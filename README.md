@@ -44,10 +44,10 @@ Usage of nitter-rss-proxy:
         User to fetch to stdout (instead of starting a server)
   -imageproxy
         Use imageproxy to serve images (default false)
-  -imageproxy-url string
-        URL of imageproxy instance (default "https://images.weserv.nl/?url=%s")
-  -imageproxy-url-encode
-        Encode URL of imageproxy instance (default true)
+  -imageproxyurl string
+        URL of imageproxy instance (default "https://weserv.nl/?url=%s")
+  -imageproxyurlencode
+        Encode URL of imageproxy instance (default false)
 
 ```
 
