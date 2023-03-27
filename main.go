@@ -115,30 +115,24 @@ func newHandler(base, instancesStr string, opts handlerOptions) (*handler, error
 			return nil, fmt.Errorf("failed parsing %q: %v", base, err)
 		}
 	}
-	wg := &sync.WaitGroup{}
 	instances := strings.Split(instancesStr, ",")
-	wg.Add(len(instances))
 	log.Printf("start checkServerHttp,len: %d", len(instances))
-	for _, in := range instances {
-		defer wg.Done()
-		go func(_in string) {
-			log.Printf("checkServerHttp: %s", _in)
-			if _in == "" {
-				return
-			}
-			u, err := url.Parse(_in)
-			if err != nil {
-				log.Printf("failed parsing %q: %v", _in, err)
-				return
-			}
-			success := checkServerHttp(u)
-			if !success {
-				log.Printf("failed to connect to %q", _in)
-			}
-			hnd.instances = append(hnd.instances, u)
-		}(in)
+	for _, _in := range instances {
+		log.Printf("checkServerHttp: %s", _in)
+		if _in == "" {
+			continue
+		}
+		u, err := url.Parse(_in)
+		if err != nil {
+			log.Printf("failed parsing %q: %v", _in, err)
+			continue
+		}
+		success := checkServerHttp(u)
+		if !success {
+			log.Printf("failed to connect to %q", _in)
+		}
+		hnd.instances = append(hnd.instances, u)
 	}
-	wg.Wait()
 	log.Printf("end checkServerHttp")
 	if len(hnd.instances) == 0 {
 		return nil, errors.New("no instances supplied")
