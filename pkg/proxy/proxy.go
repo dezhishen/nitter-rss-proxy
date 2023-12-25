@@ -1,17 +1,12 @@
-// Copyright 2021 Daniel Erat.
-// All rights reserved.
-
-package main
+package proxy
 
 import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/fcgi"
 	"net/url"
@@ -24,6 +19,8 @@ import (
 
 	"github.com/gorilla/feeds"
 	"github.com/mmcdole/gofeed"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -31,51 +28,53 @@ const (
 	minIDHeader = "Min-Id" // header returned by Nitter with min ID among items
 )
 
-// feedFormat describes different feed formats that can be written.
-type feedFormat string
+// FeedFormat describes different feed formats that can be written.
+type FeedFormat string
 
 const (
-	atomFormat feedFormat = "atom"
-	jsonFormat feedFormat = "json"
-	rssFormat  feedFormat = "rss"
+	atomFormat FeedFormat = "atom"
+	jsonFormat FeedFormat = "json"
+	rssFormat  FeedFormat = "rss"
 )
 
-func main() {
-	var opts handlerOptions
-
-	addr := flag.String("addr", "localhost:8080", "Network address to listen on")
-	base := flag.String("base", "", "Base URL for served feeds")
-	flag.BoolVar(&opts.cycle, "cycle", true, "Cycle through instances")
-	flag.BoolVar(&opts.debugAuthors, "debug-authors", true, "Log per-author tweet counts")
-	fastCGI := flag.Bool("fastcgi", false, "Use FastCGI instead of listening on -addr")
-	format := flag.String("format", "atom", `Feed format to write ("atom", "json", "rss")`)
-	instances := flag.String("instances", "https://nitter.net", "Comma-separated list of URLs of Nitter instances to use")
-	flag.BoolVar(&opts.rewrite, "rewrite", true, "Rewrite tweet content to point at twitter.com")
-	timeout := flag.Int("timeout", 10, "HTTP timeout in seconds for fetching a feed from a Nitter instance")
-	user := flag.String("user", "", "User to fetch to stdout (instead of starting a server)")
-	flag.Parse()
-
-	opts.format = feedFormat(*format)
-	opts.timeout = time.Duration(*timeout) * time.Second
-
-	hnd, err := newHandler(*base, *instances, opts)
-	if err != nil {
-		log.Fatal("Failed creating handler: ", err)
+func Start(opts Options) error {
+	if opts.FeedFormat == "" {
+		opts.FeedFormat = atomFormat
 	}
-
-	if *user != "" {
+	if opts.Addr == "" {
+		opts.Addr = "localhost:8080"
+	}
+	if opts.Timeout == 0 {
+		opts.Timeout = 10
+	}
+	if len(opts.Instances) == 0 {
+		opts.Instances = []string{"https://nitter.net"}
+	}
+	hnd, err := newHandler(opts.Base, opts.Instances, opts)
+	if err != nil {
+		return fmt.Errorf("failed creating handler: %v", err)
+	}
+	if opts.User != "" {
 		w := newFakeResponseWriter()
-		req, _ := http.NewRequest(http.MethodGet, "/"+*user, nil)
+		req, _ := http.NewRequest(http.MethodGet, "/"+opts.User, nil)
 		hnd.ServeHTTP(w, req)
 		if w.status != http.StatusOK {
 			log.Fatal(w.msg)
 		}
-	} else if *fastCGI {
-		log.Fatal("Failed serving over FastCGI: ", fcgi.Serve(nil, hnd))
+	} else if opts.FastCGI {
+		err := fcgi.Serve(nil, hnd)
+		if err != nil {
+			return fmt.Errorf("failed serving over FastCGI: %v", err)
+		}
 	} else {
-		srv := &http.Server{Addr: *addr, Handler: hnd}
-		log.Fatalf("Failed serving on %v: %v", *addr, srv.ListenAndServe())
+		srv := &http.Server{Addr: opts.Addr, Handler: hnd}
+		log.Infof("Start server on %v", opts.Addr)
+		err := srv.ListenAndServe()
+		if err != nil {
+			return fmt.Errorf("failed serving on %s: %v", opts.Addr, err)
+		}
 	}
+	return nil
 }
 
 // handler implements http.Handler to accept GET requests for RSS feeds.
@@ -83,22 +82,27 @@ type handler struct {
 	base      *url.URL
 	client    http.Client
 	instances []*url.URL
-	opts      handlerOptions
+	opts      Options
 	start     int        // starting index in instances
 	mu        sync.Mutex // protects start
 }
 
-type handlerOptions struct {
-	cycle        bool // cycle through instances
-	timeout      time.Duration
-	format       feedFormat
-	rewrite      bool // rewrite tweet content to point at Twitter
-	debugAuthors bool // log per-author tweet counts
+type Options struct {
+	Addr         string     `yaml:"addr"`
+	Base         string     `yaml:"base"`
+	Cycle        bool       `yaml:"cycle"` // cycle through instances
+	Timeout      int        `yaml:"timeout"`
+	FeedFormat   FeedFormat `yaml:"feed-format"`
+	Instances    []string   `yaml:"instances"`
+	Rewrite      bool       `yaml:"rewrite"`       // rewrite tweet content to point at Twitter
+	DebugAuthors bool       `yaml:"debug-authors"` // log per-author tweet counts
+	FastCGI      bool       `yaml:"fastcgi"`
+	User         string     `yaml:"user"`
 }
 
-func newHandler(base, instances string, opts handlerOptions) (*handler, error) {
+func newHandler(base string, instances []string, opts Options) (*handler, error) {
 	hnd := &handler{
-		client: http.Client{Timeout: opts.timeout},
+		client: http.Client{Timeout: time.Second * time.Duration(opts.Timeout)},
 		opts:   opts,
 	}
 
@@ -109,7 +113,7 @@ func newHandler(base, instances string, opts handlerOptions) (*handler, error) {
 		}
 	}
 
-	for _, in := range strings.Split(instances, ",") {
+	for _, in := range instances {
 		// Hack to permit trailing commas to make it easier to comment out instances in configs.
 		if in == "" {
 			continue
@@ -160,7 +164,7 @@ func (hnd *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	start := hnd.start
-	if hnd.opts.cycle {
+	if hnd.opts.Cycle {
 		hnd.mu.Lock()
 		hnd.start = (hnd.start + 1) % len(hnd.instances)
 		hnd.mu.Unlock()
@@ -241,7 +245,7 @@ func (hnd *handler) rewrite(w http.ResponseWriter, b []byte, user string, loc *u
 		// The Content field seems to be empty. gofeed appears to instead return the
 		// content (often including HTML) in the Description field.
 		content := oi.Description
-		if hnd.opts.rewrite {
+		if hnd.opts.Rewrite {
 			if content, err = rewriteContent(oi.Description, loc); err != nil {
 				return err
 			}
@@ -256,7 +260,7 @@ func (hnd *handler) rewrite(w http.ResponseWriter, b []byte, user string, loc *u
 
 		// When writing a JSON feed, the feeds package seems to expect the Description field to
 		// contain text rather than HTML.
-		if hnd.opts.format == jsonFormat {
+		if hnd.opts.FeedFormat == jsonFormat {
 			item.Description = oi.Title
 		} else {
 			item.Description = content
@@ -290,11 +294,11 @@ func (hnd *handler) rewrite(w http.ResponseWriter, b []byte, user string, loc *u
 	// I've been seeing an occasional bug where a given feed will suddenly include a bunch of
 	// unrelated tweets from some other feed. I'm assuming it's caused by one or more buggy Nitter
 	// instances.
-	if hnd.opts.debugAuthors {
+	if hnd.opts.DebugAuthors {
 		log.Printf("Authors for %v: %v", user, authorCnt)
 	}
 
-	switch hnd.opts.format {
+	switch hnd.opts.FeedFormat {
 	case atomFormat:
 		af := (&feeds.Atom{Feed: feed}).AtomFeed()
 		af.Icon = img
@@ -323,7 +327,7 @@ func (hnd *handler) rewrite(w http.ResponseWriter, b []byte, user string, loc *u
 		w.Header().Set("Content-Type", "application/rss+xml; charset=UTF-8")
 		return feed.WriteRss(w)
 	default:
-		return fmt.Errorf("unknown format %q", hnd.opts.format)
+		return fmt.Errorf("unknown format %q", hnd.opts.FeedFormat)
 	}
 }
 

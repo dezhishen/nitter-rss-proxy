@@ -1,0 +1,7 @@
+proxy:
+  addr: 0.0.0.0:8080
+  instances:
+    - https://nitter.catsarch.com/
+    - https://nt.ggtyler.dev/
+    - https://nitter.jakefrosty.com/
+    - https://nitter.manasiwibi.com/

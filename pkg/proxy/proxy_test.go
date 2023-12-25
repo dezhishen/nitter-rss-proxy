@@ -1,7 +1,7 @@
 // Copyright 2023 Daniel Erat.
 // All rights reserved.
 
-package main
+package proxy
 
 import (
 	"net/url"
