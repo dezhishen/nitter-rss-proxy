@@ -1,144 +1,22 @@
-name: build
-
+name: release
 on:
-  push:
-    tags: ['v*', 'test*']
+  release:
+    types: [created]
 env:
   APP_NAME: nitter-rss-proxy
 jobs:
-  build_macos:
-    name: Build for MacOS
-    runs-on: macos-13
-    steps:
-    - name: "Checkout"
-      uses: actions/checkout@v2
-      with:
-        submodules: 'recursive'
-    - name: "Setup Go"
-      uses: actions/setup-go@v2
-      with:
-        go-version: '^1.20'
-    - name: Cache Go Modules
-      uses: actions/cache@v2
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-    - name: "Build"
-      run: make build_macos
-    - name: Upload
-      uses: actions/upload-artifact@v2
-      with:
-        name: macos
-        path: _output/macos/nitter-rss-proxy.app
-
-  build_windows:
-    name: Build for Windows
-    runs-on: windows-2022
-    steps:
-    - name: "Checkout"
-      uses: actions/checkout@v2
-      with:
-        submodules: 'recursive'
-    - name: "Setup Go"
-      uses: actions/setup-go@v2
-      with:
-        go-version: '^1.20'
-    - name: Cache Go Modules
-      uses: actions/cache@v2
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-    - name: "Build"
-      run: make build_windows
-    - name: Upload
-      uses: actions/upload-artifact@v2
-      with:
-        name: windows
-        path: _output/windows/nitter-rss-proxy.exe
-
-  build_linux:
-    name: Build for Linux
-    runs-on: ubuntu-22.04
-    steps:
-    - name: "Checkout"
-      uses: actions/checkout@v2
-      with:
-        submodules: 'recursive'
-    - name: "Setup Go"
-      uses: actions/setup-go@v2
-      with:
-        go-version: '^1.20'
-    - name: Cache Go Modules
-      uses: actions/cache@v2
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-    - name: "Build"
-      run: make build_linux
-    - name: Upload
-      uses: actions/upload-artifact@v2
-      with:
-        name: linux
-        path: _output/linux/nitter-rss-proxy
-
-  create_release:
-    name: Create Release
+  build-go-binary:
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.ref, 'test') }}
-    needs: [build_macos, build_windows, build_linux]
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin] # 需要打包的系统
+        goarch: [amd64, arm64, arm] # 需要打包的架构
     steps:
-    - name: Create Release
-      uses: actions/create-release@v1
-      id: create_release
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-          tag_name: ${{ github.ref }}
-          release_name: ${{ github.ref }}
-          draft: true
-          prerelease: true
-    - name: Download Artifacts
-      uses: actions/download-artifact@v2
-      with:
-        path: .
-    - name: Preparation
-      run: |
-        ls -R
-        chmod u+x macos/Contents/MacOS/nitter-rss-proxy
-        chmod u+x linux/nitter-rss-proxy
-        mv macos nitter-rss-proxy.app     && zip -r nitter-rss-proxy-macos.zip nitter-rss-proxy.app
-        mv windows/nitter-rss-proxy.exe . && zip nitter-rss-proxy-windows.zip nitter-rss-proxy.exe
-        mv linux/nitter-rss-proxy .       && zip nitter-rss-proxy-linux.zip nitter-rss-proxy
-    - name: Upload MacOS
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./nitter-rss-proxy-macos.zip
-          asset_name: nitter-rss-proxy-${{ github.ref }}-macos64.zip
-          asset_content_type: application/zip
-    - name: Upload Windows
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./nitter-rss-proxy-windows.zip
-          asset_name: nitter-rss-proxy-${{ github.ref }}-windows64.zip
-          asset_content_type: application/zip
-    - name: Upload Linux
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./nitter-rss-proxy-linux.zip
-          asset_name: nitter-rss-proxy-${{ github.ref }}-linux64.zip
-          asset_content_type: application/zip
+      - uses: actions/checkout@v3
+      - uses: wangyoucao577/go-release-action@v1.30
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }} # 一个默认的变量，用来实现往 Release 中添加文件
+          goos: ${{ matrix.goos }}
+          goarch: ${{ matrix.goarch }}
+          goversion: 1.18 # 可以指定编译使用的 Golang 版本
+          binary_name: ${{ env.APP_NAME }} # 可以指定二进制文件的名称

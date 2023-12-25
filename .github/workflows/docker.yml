@@ -1,8 +1,7 @@
 name: Build Docker Image
 on:
-  push:
-    tags:
-      - v*
+  release:
+    types: [created]
 env:
   APP_NAME: nitter-rss-proxy
 jobs:
