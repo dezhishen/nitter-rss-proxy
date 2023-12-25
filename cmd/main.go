@@ -4,8 +4,8 @@
 package main
 
 import (
-	"github.com/derat/nitter-rss-proxy/pkg/config"
-	"github.com/derat/nitter-rss-proxy/pkg/proxy"
+	"github.com/dezhishen/nitter-rss-proxy/pkg/config"
+	"github.com/dezhishen/nitter-rss-proxy/pkg/proxy"
 )
 
 func main() {

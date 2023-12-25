@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/fcgi"
 	"net/url"
@@ -208,7 +207,7 @@ func (hnd *handler) fetch(instance *url.URL, user, query string) (
 	if resp.StatusCode != http.StatusOK {
 		return nil, loc, "", fmt.Errorf("server returned %v (%v)", resp.StatusCode, resp.Status)
 	}
-	body, err = ioutil.ReadAll(resp.Body)
+	body, err = io.ReadAll(resp.Body)
 	return body, loc, resp.Header.Get(minIDHeader), err
 }
 
@@ -503,7 +502,7 @@ var rewritePatterns = []struct {
 // can be served by Twitter.
 func rewriteContent(s string, loc *url.URL) (string, error) {
 	// It'd be better to parse the HTML instead of using regular expressions, but that's quite
-	// painful to do (see https://github.com/derat/twittuh) so I'm trying to avoid it for now.
+	// painful to do (see https://github.com/dezhishen/twittuh) so I'm trying to avoid it for now.
 	for _, rw := range rewritePatterns {
 		s = rw.re.ReplaceAllStringFunc(s, func(o string) string {
 			return rw.fn(rw.re.FindStringSubmatch(o))
@@ -511,7 +510,7 @@ func rewriteContent(s string, loc *url.URL) (string, error) {
 	}
 
 	// Match all remaining URLs served by the instance and change them to use twitter.com:
-	// https://github.com/derat/nitter-rss-proxy/issues/13
+	// https://github.com/dezhishen/nitter-rss-proxy/issues/13
 	if loc != nil {
 		// Match both http:// and https:// since some instances seem to be configured
 		// to always use http:// for links.

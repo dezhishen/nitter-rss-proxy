@@ -9,7 +9,7 @@ RUN go env -w GO111MODULE=auto && \
   upx --lzma /nitter-rss-proxy
 
 FROM alpine
-LABEL maintainer="github.com/derat/nitter-rss-proxy"
+LABEL maintainer="github.com/dezhishen/nitter-rss-proxy"
 EXPOSE 8080/tcp
 WORKDIR /data
 VOLUME /data
