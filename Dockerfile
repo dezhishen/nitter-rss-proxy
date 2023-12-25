@@ -1,11 +1,16 @@
-FROM golang:alpine as builder
+FROM golang:1.20-alpine3.17 as builder
 WORKDIR /build
+RUN apk add --no-cache upx 
 COPY . .
-RUN go build -o /nitter-rss-proxy
+RUN go build -ldflags="-s -w" -o /nitter-rss-proxy cmd/main.go && \
+    upx --lzma /nitter-rss-proxy
 
 FROM alpine
 LABEL maintainer="github.com/derat/nitter-rss-proxy"
 EXPOSE 8080/tcp
+WORKDIR /data
+VOLUME /data
 COPY --from=builder /nitter-rss-proxy /nitter-rss-proxy
 RUN chmod +x /nitter-rss-proxy
-ENTRYPOINT ["/nitter-rss-proxy","-addr","0.0.0.0:8080"]
+ENTRYPOINT [ "/nitter-rss-proxy" ]
+CMD ["-addr", "0.0.0.0:8080"]
