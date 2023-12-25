@@ -16,7 +16,7 @@ jobs:
       - uses: wangyoucao577/go-release-action@v1.30
         with:
           ldflags: -s -w
-          project_path: ./cmdb
+          project_path: ./cmd
           github_token: ${{ secrets.GITHUB_TOKEN }} # 一个默认的变量，用来实现往 Release 中添加文件
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
