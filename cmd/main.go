@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	err := config.Init("./cofig", "config")
+	err := config.Init("./config", "config")
 	if err != nil {
 		panic(err)
 	}
